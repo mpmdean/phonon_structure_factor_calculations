@@ -28,12 +28,17 @@ phonon.set_mesh(mesh,
                 is_mesh_symmetry=False,
                 is_eigenvectors=True)
 
-# Gamma-L path in FCC conventional basis
-directions = [[0.5, 0.5, 0.5],
-                   [-0.5, 0.5, 0.5]]
+# Path in FCC conventional basis
+direction = np.array([0.5, 0.5, 0.5])
 G_cubic = np.array([3, 3, 3])
 n_points = 51
 temperature = 30
+
+# For constructing spectra
+E = np.linspace(-5, 35, 100)
+kb = 0.08617330
+gamma = 0.3 #HWHM
+THztomeV = 4.13567
 
 print("# Distance from Gamma point, 4 band frequencies in meV, "
       "4 dynamic structure factors")
@@ -63,74 +68,76 @@ P = phonon.primitive_matrix
 dsfs = []
 
 G_prim = np.dot(G_cubic, P)
-for direction in directions:
-    direction_prim = np.dot(direction, P)
+
+direction_prim = np.dot(direction, P)
+
+if verbose:
+    print("# %s to %s (Primitive: %s to %s)".format(G_cubic, G_cubic + direction,
+             G_prim, G_prim + direction_prim))
+
+# Remove Gamma point because number of bands is different.
+qpoints = np.array([direction_prim * x
+                    for x in np.arange(1, n_points) / float(n_points - 1)])
+
+phonon.set_band_structure([qpoints])
+_, distances, frequencies, _ = phonon.get_band_structure()
+distances = distances[0]
+frequencies = frequencies[0] * THztomeV
+
+phonon.set_dynamic_structure_factor(
+    qpoints,
+    G_prim,
+    temperature,
+    func_atomic_form_factor=func_AFF,
+    freq_min=1e-3,
+    run_immediately=False)
+
+dsf = phonon.dynamic_structure_factor
+for i, S in enumerate(dsf):  # Use as iterator
+    Q_cubic = np.dot(dsf.qpoints[i], np.linalg.inv(P))
 
     if verbose:
-        print("# %s to %s (Primitive: %s to %s)".format(G_cubic, G_cubic + direction,
-                 G_prim, G_prim + direction_prim))
+        f = frequencies[i]
+        bi_sets = degenerate_sets(f)
+        text = "%f  " % distances[i]
+        text += "%f %f %f  " % tuple(Q_cubic)
+        text += " ".join(["%f" % (f[bi].sum() / len(bi))
+                          for bi in bi_sets])
+        text += "  "
+        text += " ".join(["%f" % (S[bi].sum()) for bi in bi_sets])
+        print(text)
 
-    qpoints = np.array(
-        [direction_prim * x
-         for x in np.arange(n_points) / float(n_points - 1)])
-    phonon.set_band_structure([qpoints])
-    _, distances, frequencies, _ = phonon.get_band_structure()
-    # Remove Gamma point because number of bands is different.
-    qpoints = qpoints[1:]
-    distances = distances[0][1:]
-    frequencies = frequencies[0][1:]
-
-    phonon.set_dynamic_structure_factor(
-        qpoints,
-        G_prim,
-        temperature,
-        func_atomic_form_factor=func_AFF,
-        freq_min=1e-3,
-        run_immediately=False)
-
-    dsf = phonon.dynamic_structure_factor
-    for i, S in enumerate(dsf):  # Use as iterator
-        # Q_cubic = np.dot(dsf.Qpoints[i], np.linalg.inv(P)) # MPMD
-        Q_cubic = np.dot(dsf.qpoints[i], np.linalg.inv(P))
-
-        if verbose:
-            f = frequencies[i]
-            bi_sets = degenerate_sets(f)
-            text = "%f  " % distances[i]
-            text += "%f %f %f  " % tuple(Q_cubic)
-            text += " ".join(["%f" % (f[bi].sum() / len(bi))
-                              for bi in bi_sets])
-            text += "  "
-            text += " ".join(["%f" % (S[bi].sum()) for bi in bi_sets])
-            print(text)
-
-    if verbose:
-        print("")
-        print("")
-
-    dsfs.append(dsf)
-
+if verbose:
+    print("")
+    print("")
 
 S_q_modes = np.array([line for line in dsf])
-gamma = 0.6 #HWHM
-# sum over modes
-E = np.linspace(-25, 35, 100)
 E_ = E[:, np.newaxis]
-bose = 1./ (1 - np.exp(-E/(0.08617330 * temperature)))
-bose_ = bose[:, np.newaxis]
+bose = 1./ (1 - np.exp(-E/(kb * temperature)) + 1j*gamma*0.01)
 
 chi = sum(4*S_q*gamma*E_*f_q / (np.pi *((E_**2-f_q**2)**2 + 4*E_**2*gamma**2))
-       for S_q, f_q in zip(S_q_modes.T, frequencies.T*4.13567)
+       for S_q, f_q in zip(S_q_modes.T, frequencies.T)
        )
 
-I = bose_ * chi
+I = np.abs(bose[:, np.newaxis] * chi)
 
 fig, ax = plt.subplots()
-
-art = ax.pcolor(np.linspace(0, 1, I.shape[1]), E, I,
-                norm=colors.LogNorm(vmin=0.01, vmax=I.max()))
+x_axis = np.linspace(0, 1, I.shape[1])
+art = ax.pcolor(x_axis, E, I,
+                norm=colors.LogNorm(vmin=np.percentile(I, 5), vmax=np.percentile(I, 95)),
+                cmap='inferno')
 cb = plt.colorbar(art, ax=ax)
+
+for x_axis_val, f_q in zip(x_axis, frequencies):
+    for f in f_q:
+        ax.plot(x_axis_val, f, 'g.', alpha=0.5)
+
 cb.set_label('$S(Q,\omega)$')
 ax.set_xlabel("{} to {}".format(G_cubic, G_cubic + direction))
 ax.set_ylabel('Energy (meV)')
-fig.show()
+
+try:
+    if __IPYTHON__:
+        fig.show()
+except NameError:
+    fig.savefig('Sqom.pdf')

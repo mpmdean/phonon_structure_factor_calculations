@@ -6,8 +6,6 @@ from phonopy.phonon.degeneracy import degenerate_sets
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
-verbose = True
-
 # Path in FCC conventional basis
 n_points = 51
 Q_cubic = np.vstack([np.linspace(3, 3.5, n_points),
@@ -18,7 +16,7 @@ temperature = 30
 # For constructing spectra
 E = np.linspace(-5, 35, 100)
 kb = 0.08617330
-gamma = 0.3 #HWHM
+gamma = 0.3 #HWHM of the lorentizan used for the modes
 THztomeV = 4.13567
 
 # Mesh sampling calculation is needed for Debye-Waller factor
@@ -43,10 +41,10 @@ phonon.run_mesh(mesh, with_eigenvectors=True, is_mesh_symmetry=False)
 # a1, b1, a2, b2, a3, b3, a4, b4, a5, b5, c
 f_params = {'Na': [3.148690, 2.594987, 4.073989, 6.046925,
                    0.767888, 0.070139, 0.995612, 14.1226457,
-                   0.968249, 0.217037, 0.045300],  # 1+
+                   0.968249, 0.217037, 0.045300],
             'Cl': [1.061802, 0.144727, 7.139886, 1.171795,
                    6.524271, 19.467656, 2.355626, 60.320301,
-                   35.829404, 0.000436, -34.916604]}  # 1-
+                   35.829404, 0.000436, -34.916604]}
 
 def get_func_AFF(f_params):
     def func(symbol, Q):

@@ -1,3 +1,4 @@
+WRONG DUE TO updates in phononpy. See email from Xuefei.
 # phonon_structure_factor_calculations
 Example for NaCl based on phonopy 2.1.1. Updated for new API
 
